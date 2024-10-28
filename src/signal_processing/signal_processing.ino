@@ -32,13 +32,23 @@ void loop() {
   FFT.Compute(vReal, vImag, SAMPLES, FFT_FORWARD);                  // Compute the FFT
   FFT.ComplexToMagnitude(vReal, vImag, SAMPLES);                    // Compute magnitudes of the frequency bins
 
-  /* Output the frequency and corresponding magnitudes */
-  for (int i = 0; i < (SAMPLES / 2); i++) {                         // Only first SAMPLES/2 bins contain useful data
-    double frequency = (i * 1.0 * SAMPLING_FREQUENCY) / SAMPLES;    // Calculate frequency represented by each bin
-    Serial.print(frequency);
-    Serial.print(" Hz: ");
-    Serial.println(vReal[i], 1);                                    // Print the magnitude
+   /* Find the dominant frequency */
+  maxMagnitude = 0;                // Reset maximum magnitude
+  dominantFrequency = 0;           // Reset dominant frequency
+
+  for (int i = 1; i < (SAMPLES / 2); i++) {  // Start from 1 to skip the DC component
+    double frequency = (i * 1.0 * SAMPLING_FREQUENCY) / SAMPLES; // Calculate frequency of each bin
+    if (vReal[i] > maxMagnitude) {
+      maxMagnitude = vReal[i];     // Update maximum magnitude
+      dominantFrequency = frequency; // Update dominant frequency
+    }
   }
+
+  /* Print the dominant frequency and magnitude */
+  Serial.print("Dominant Frequency: ");
+  Serial.print(dominantFrequency);
+  Serial.print(" Hz, So the pulse is: ");
+  Serial.println(dominantFrequency * 60);
 
   delay(1000);  // Delay before next analysis
 }
