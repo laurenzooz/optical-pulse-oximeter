@@ -9,7 +9,7 @@
 #define SAMPLES 256                 // Must be a power of 2
 #define SAMPLING_FREQUENCY 250    // Hz, must be less than 10000 due to ADC sampling speed
 #define ANALOG_PIN A0              // Define the analog input pin for the sensor
-#define FILE_PATH "/wrist_interval_1ms.log" 
+#define FILE_PATH "/finger_interval_1ms.log" 
 
 unsigned int samplingPeriod_us;
 unsigned long microseconds;
@@ -128,7 +128,7 @@ void loop() {
     Serial.println(" BPM");
 
     // Update BLE characteristic with BPM if a device is connected
-    if (deviceConnected) {
+    if (deviceConnected && bpm > 20 && bpm < 220) {
         uint8_t bpmData[2];
         bpmData[0] = 0x00; // Flags byte, set to 0x00 for 8-bit heart rate format
         bpmData[1] = (uint8_t)bpm; // Heart rate measurement as a single byte
