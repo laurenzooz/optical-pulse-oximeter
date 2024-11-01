@@ -1,5 +1,9 @@
 #include <Arduino.h>
 #include <arduinoFFT.h>
+#include <BLEDevice.h>
+#include <BLEService.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
 
 #define SAMPLES 64                 // Must be a power of 2
 #define SAMPLING_FREQUENCY 1000    // Hz, must be less than 10000 due to ADC sampling speed
@@ -14,8 +18,56 @@ double vImag[SAMPLES];             // Array of imaginary values
 // Initialize the FFT object without specifying the sampling frequency
 ArduinoFFT<double> FFT = ArduinoFFT<double>(vReal, vImag, SAMPLES, SAMPLING_FREQUENCY, false);
 
+// BLE definitions
+BLEServer *pServer = NULL;
+BLECharacteristic *pCharacteristic = NULL;
+bool deviceConnected = false;
+float bpm = 0.0;
+
+#define SERVICE_UUID           "adf2a6e6-9b6d-4b5f-a487-77e21aafbc88"  // UUID for the Heart Rate service
+#define CHARACTERISTIC_UUID    "2A37"  // UUID for the Heart Rate Measurement characteristic
+
+// Callback when a device connects or disconnects
+class MyServerCallbacks: public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+    };
+
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+    }
+};
+
 void setup() {
     Serial.begin(115200);
+
+    // Initialize BLE
+    BLEDevice::init("OHRS"); // Set device name
+    pServer = BLEDevice::createServer();
+    pServer->setCallbacks(new MyServerCallbacks()); // Set callback for connection events
+
+    // Create a Heart Rate service
+    BLEService *pService = pServer->createService(SERVICE_UUID);
+
+    // Create a Heart Rate Measurement characteristic
+    pCharacteristic = pService->createCharacteristic(
+                        CHARACTERISTIC_UUID,
+                        BLECharacteristic::PROPERTY_NOTIFY
+                      );
+
+    pCharacteristic->addDescriptor(new BLE2902());
+    pService->start();
+
+    // Start advertising
+    BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID(SERVICE_UUID);
+    pAdvertising->setScanResponse(true);
+    pAdvertising->setMinPreferred(0x06);  // Set connection parameters for BLE
+    pAdvertising->setMaxPreferred(0x12);
+    BLEDevice::startAdvertising();
+    Serial.println("BLE Heart Rate Monitor is now advertising...");
+
+    // Set the sampling period for the analog readings
     samplingPeriod_us = round(1000000 * (1.0 / SAMPLING_FREQUENCY));
 }
 
@@ -24,8 +76,8 @@ void loop() {
     for (int i = 0; i < SAMPLES; i++) {
         microseconds = micros(); // Overflows after around 70 minutes!
 
-        vReal[i] = analogRead(ANALOG_PIN); // Read data from the analog pin
-        vImag[i] = 0; // Set imaginary part to 0
+        vReal[i] = analogRead(ANALOG_PIN); 
+        vImag[i] = 0; 
 
         /* Wait for the next sample */
         while (micros() < (microseconds + samplingPeriod_us)) {}
@@ -48,11 +100,21 @@ void loop() {
         }
     }
 
-    /* Print the dominant frequency and corresponding pulse */
+    /* Calculate and send BPM */
+    bpm = dominantFrequency * 60; // Convert frequency to beats per minute
     Serial.print("Dominant Frequency: ");
     Serial.print(dominantFrequency);
-    Serial.print(" Hz, So the pulse is: ");
-    Serial.println(dominantFrequency * 60); // Convert frequency to beats per minute
+    Serial.print(" Hz, Pulse: ");
+    Serial.print(bpm);
+    Serial.println(" BPM");
 
+    // Update BLE characteristic with BPM if a device is connected
+    if (deviceConnected) {
+        uint8_t bpmData[2];
+        bpmData[0] = 0x00; // Flags byte, set to 0x00 for 8-bit heart rate format
+        bpmData[1] = (uint8_t)bpm; // Heart rate measurement as a single byte
+        pCharacteristic->setValue(bpmData, 2); // Set characteristic value with flags + bpm
+        pCharacteristic->notify(); // Notify connected client with BPM data
+    }
     delay(1000); // Delay before next analysis
 }
