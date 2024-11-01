@@ -6,10 +6,10 @@
 #include <BLE2902.h>
 #include <LittleFS.h>
 
-#define SAMPLES 64                 // Must be a power of 2
-#define SAMPLING_FREQUENCY 1000    // Hz, must be less than 10000 due to ADC sampling speed
+#define SAMPLES 256                 // Must be a power of 2
+#define SAMPLING_FREQUENCY 250    // Hz, must be less than 10000 due to ADC sampling speed
 #define ANALOG_PIN A0              // Define the analog input pin for the sensor
-#define FILE_PATH "/high_spikes_interval_50ms.log" 
+#define FILE_PATH "/wrist_interval_1ms.log" 
 
 unsigned int samplingPeriod_us;
 unsigned long microseconds;
