@@ -4,10 +4,12 @@
 #include <BLEService.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
+#include <LittleFS.h>
 
 #define SAMPLES 64                 // Must be a power of 2
 #define SAMPLING_FREQUENCY 1000    // Hz, must be less than 10000 due to ADC sampling speed
 #define ANALOG_PIN A0              // Define the analog input pin for the sensor
+#define FILE_PATH "/high_spikes_interval_50ms.log" 
 
 unsigned int samplingPeriod_us;
 unsigned long microseconds;
@@ -41,6 +43,13 @@ class MyServerCallbacks: public BLEServerCallbacks {
 void setup() {
     Serial.begin(115200);
 
+    Serial.begin(115200);
+    if (!LittleFS.begin()) {
+        Serial.println("An error occurred while mounting LittleFS.");
+        return;
+    }
+    Serial.println("LittleFS mounted successfully.");
+
     // Initialize BLE
     BLEDevice::init("OHRS"); // Set device name
     pServer = BLEDevice::createServer();
@@ -69,14 +78,24 @@ void setup() {
 
     // Set the sampling period for the analog readings
     samplingPeriod_us = round(1000000 * (1.0 / SAMPLING_FREQUENCY));
+
+    
 }
 
 void loop() {
     /* Collect SAMPLES number of readings */
+    File file = LittleFS.open(FILE_PATH, "r");
+    if (!file) {
+        Serial.println("Failed to open file for reading");
+        delay(1000);
+        return;
+    }
     for (int i = 0; i < SAMPLES; i++) {
         microseconds = micros(); // Overflows after around 70 minutes!
 
-        vReal[i] = analogRead(ANALOG_PIN); 
+        vReal[i] = file.parseFloat();
+        Serial.print("Read value: ");
+        Serial.println(vReal[i]); // change to analogRead(ANALOG_PIN);  for pin
         vImag[i] = 0; 
 
         /* Wait for the next sample */
