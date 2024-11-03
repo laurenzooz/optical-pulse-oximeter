@@ -2,7 +2,7 @@ import serial
 import time
 
 # Open the serial port. Replace 'COM3' with your ESP32's port and set the correct baud rate.
-ser = serial.Serial('/dev/ttyACM4', 115200)
+ser = serial.Serial('/dev/ttyACM0', 115200)
 time.sleep(15)  # Give some time to establish connection
 
 # Open the text file and send each line over serial
