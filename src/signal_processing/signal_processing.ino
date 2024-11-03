@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <esp_dsp.h>
+#include <arduinoFFT.h>
 #include <BLEDevice.h>
 #include <BLEService.h>
 #include <BLEUtils.h>
@@ -18,9 +18,10 @@ int num_samples = 0;                     // Track the number of samples received
 float heart_rates[8];                    // To store heart rates for each interval
 int interval_count = 0;
 
-float vReal[points_per_interval];
-float vImag[points_per_interval]; 
+double vReal[points_per_interval];
+double vImag[points_per_interval]; 
 
+ArduinoFFT<double> FFT = ArduinoFFT<double>(vReal, vImag, points_per_interval, 20, false);
 
 // BLE definitions
 BLEServer *pServer = NULL;
@@ -43,12 +44,6 @@ class MyServerCallbacks : public BLEServerCallbacks {
 
 void setup() {
   Serial.begin(115200);
-
-
-  if (dsps_fft2r_init_fc32(signal_data, points_per_interval) != ESP_OK) {
-    Serial.println("DSP library initialization failed!");
-    return;
-  }
 
   // Initialize BLE
   BLEDevice::init("Optical Pulse Oximeter");  // Set device name
@@ -85,7 +80,7 @@ void loop() {
 
     // Check if we've received enough samples for one interval
     if (num_samples >= points_per_interval) {
-      Serial.println("Gonna calculate the pulse");
+      //Serial.println("Gonna calculate the pulse");
       processInterval();
       num_samples = 0;  // Reset sample count for the next interval
     }
@@ -94,39 +89,16 @@ void loop() {
 }
 
 void processInterval() {
-  Serial.println("Starting the first loop");
+  //Serial.println("Starting the first loop");
 
   
-
-  for (int i = 0; i < points_per_interval; i++) {
-    vReal[i] = signal_data[i];
-    vImag[i] = 0.0;
-    Serial.println(vReal[i]);
-  }
-
-  float window[points_per_interval];
-
-  // Apply Hamming window
-  dsps_wind_hann_f32(window, points_per_interval);
-
-  // Apply FFT
-  if (dsps_fft2r_fc32_ae32(signal_data, points_per_interval) != ESP_OK) {
-    Serial.println("FFT execution failed!");
-    return;
-  }
-  dsps_bit_rev_fc32(dsps_wind_hann_f32, points_per_interval);
-  dsps_cplx2reC_fc32(dsps_wind_hann_f32, points_per_interval);
-
-  // Debug: Print FFT output
-  for (int i = 0; i < points_per_interval; i++) {
-    Serial.print(vReal[i], 6);
-    Serial.print(" ");
-    Serial.println(vImag[i], 6);
-  }
-
-  float dominant_frequency = 0;
-  float max_magnitude = 0;
-
+  FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward);	/* Weigh data */
+  FFT.compute(FFTDirection::Forward); /* Compute FFT */
+  FFT.complexToMagnitude(); /* Compute magnitudes */
+  
+  float peak = FFT.majorPeak();
+  
+  /*
   Serial.println("Starting the loop");
 
   for (int i = 1; i < points_per_interval / 2; i++) {
@@ -141,9 +113,9 @@ void processInterval() {
     }
   }
 
-
+*/
   // Calculate and send BPM
-  float bpm = dominant_frequency * 60;  // Convert frequency to beats per minute
+  float bpm = peak * 60;  // Convert frequency to beats per minute
   Serial.print("Dominant Frequency: ");
   Serial.print(dominant_frequency);
   Serial.print(" Hz, Pulse: ");
