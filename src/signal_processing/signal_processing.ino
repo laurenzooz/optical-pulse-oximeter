@@ -1,37 +1,36 @@
-#include <LittleFS.h>
-
 #include <Arduino.h>
-#include <arduinoFFT.h>
+#include <esp_dsp.h>
 #include <BLEDevice.h>
 #include <BLEService.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
-#include <LittleFS.h>
 
-#define SAMPLES 256             // Must be a power of 2
-#define SAMPLING_FREQUENCY 250  // Hz, must be less than 10000 due to ADC sampling speed
-#define ANALOG_PIN A0           // Define the analog input pin for the sensor
-#define FILE_PATH "/data/data.txt"
+const int points_per_second = 20;  // Sampling rate is 20 samples per second (1 / 0.05)
+//const int interval_duration = 5;   // Interval duration in seconds
+const int points_per_interval = 64;
 
-unsigned int samplingPeriod_us;
-unsigned long microseconds;
+// Heart rate limits (in frequency, ~40 to 180 bpm)
+const float min_freq = 0.65;
+const float max_freq = 3;
 
-double vReal[SAMPLES];  // Array of real values
-double vImag[SAMPLES];  // Array of imaginary values
+float signal_data[points_per_interval];  // Renamed to avoid conflict with C standard library `signal`
+int num_samples = 0;                     // Track the number of samples received
+float heart_rates[8];                    // To store heart rates for each interval
+int interval_count = 0;
 
-// Initialize the FFT object without specifying the sampling frequency
-ArduinoFFT<double> FFT = ArduinoFFT<double>(vReal, vImag, SAMPLES, SAMPLING_FREQUENCY, false);
+float vReal[points_per_interval];
+float vImag[points_per_interval]; 
+
 
 // BLE definitions
 BLEServer *pServer = NULL;
 BLECharacteristic *pCharacteristic = NULL;
 bool deviceConnected = false;
-float bpm = 0.0;
 
 #define SERVICE_UUID "adf2a6e6-9b6d-4b5f-a487-77e21aafbc88"  // UUID for the Heart Rate service
 #define CHARACTERISTIC_UUID "2A37"                           // UUID for the Heart Rate Measurement characteristic
 
-// Callback when a device connects or disconnects
+// Callback for device connection events
 class MyServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *pServer) {
     deviceConnected = true;
@@ -43,16 +42,16 @@ class MyServerCallbacks : public BLEServerCallbacks {
 };
 
 void setup() {
-
   Serial.begin(115200);
-  if (!LittleFS.begin()) {
-    Serial.println("An error occurred while mounting LittleFS.");
+
+
+  if (dsps_fft2r_init_fc32(signal_data, points_per_interval) != ESP_OK) {
+    Serial.println("DSP library initialization failed!");
     return;
   }
-  Serial.println("LittleFS mounted successfully.");
 
   // Initialize BLE
-  BLEDevice::init("OHRS");  // Set device name
+  BLEDevice::init("Optical Pulse Oximeter");  // Set device name
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());  // Set callback for connection events
 
@@ -75,63 +74,85 @@ void setup() {
   pAdvertising->setMaxPreferred(0x12);
   BLEDevice::startAdvertising();
   Serial.println("BLE Heart Rate Monitor is now advertising...");
-
-  // Set the sampling period for the analog readings
-  samplingPeriod_us = round(1000000 * (1.0 / SAMPLING_FREQUENCY));
 }
 
 void loop() {
-  /* Collect SAMPLES number of readings */
-  File file = LittleFS.open(FILE_PATH, "r");
-  if (!file) {
-    Serial.println("Failed to open file for reading");
-    delay(1000);
+  if (Serial.available() > 0) {
+    // Read the incoming data
+    float value = Serial.parseFloat();
+    //Serial.println(value);
+    signal_data[num_samples++] = value;  // Updated to `signal_data` to avoid conflict
+
+    // Check if we've received enough samples for one interval
+    if (num_samples >= points_per_interval) {
+      Serial.println("Gonna calculate the pulse");
+      processInterval();
+      num_samples = 0;  // Reset sample count for the next interval
+    }
+  }
+  delay(50);  // Delay before next analysis
+}
+
+void processInterval() {
+  Serial.println("Starting the first loop");
+
+  
+
+  for (int i = 0; i < points_per_interval; i++) {
+    vReal[i] = signal_data[i];
+    vImag[i] = 0.0;
+    Serial.println(vReal[i]);
+  }
+
+  float window[points_per_interval];
+
+  // Apply Hamming window
+  dsps_wind_hann_f32(window, points_per_interval);
+
+  // Apply FFT
+  if (dsps_fft2r_fc32_ae32(signal_data, points_per_interval) != ESP_OK) {
+    Serial.println("FFT execution failed!");
     return;
   }
-  for (int i = 0; i < SAMPLES; i++) {
-    microseconds = micros();  // Overflows after around 70 minutes!
+  dsps_bit_rev_fc32(dsps_wind_hann_f32, points_per_interval);
+  dsps_cplx2reC_fc32(dsps_wind_hann_f32, points_per_interval);
 
-    vReal[i] = file.parseFloat();
-    Serial.print("Read value: ");
-    Serial.println(vReal[i]);  // change to analogRead(ANALOG_PIN);  for pin
-    vImag[i] = 0;
-
-    /* Wait for the next sample */
-    while (micros() < (microseconds + samplingPeriod_us)) {}
+  // Debug: Print FFT output
+  for (int i = 0; i < points_per_interval; i++) {
+    Serial.print(vReal[i], 6);
+    Serial.print(" ");
+    Serial.println(vImag[i], 6);
   }
 
-  /* Perform FFT on the samples */
-  FFT.windowing(vReal, SAMPLES, FFT_WIN_TYP_HAMMING, FFT_FORWARD);  // Apply a window function to reduce spectral leakage
-  FFT.compute(vReal, vImag, SAMPLES, FFT_FORWARD);                  // Compute the FFT
-  FFT.complexToMagnitude(vReal, vImag, SAMPLES);                    // Compute magnitudes of the frequency bins
+  float dominant_frequency = 0;
+  float max_magnitude = 0;
 
-  /* Find the dominant frequency */
-  double maxMagnitude = 0;       // Reset maximum magnitude
-  double dominantFrequency = 0;  // Reset dominant frequency
+  Serial.println("Starting the loop");
 
-  for (int i = 1; i < (SAMPLES / 2); i++) {                       // Start from 1 to skip the DC component
-    double frequency = (i * 1.0 * SAMPLING_FREQUENCY) / SAMPLES;  // Calculate frequency of each bin
-    if (vReal[i] > maxMagnitude) {
-      maxMagnitude = vReal[i];        // Update maximum magnitude
-      dominantFrequency = frequency;  // Update dominant frequency
+  for (int i = 1; i < points_per_interval / 2; i++) {
+    float frequency = i * (points_per_second / (float)points_per_interval);
+    float magnitude = sqrt(vReal[i * 2] * vReal[i * 2] + vReal[i * 2 + 1] * vReal[i * 2 + 1]);
+
+    if (frequency >= min_freq && frequency <= max_freq && magnitude > max_magnitude) {
+      max_magnitude = magnitude;
+      dominant_frequency = frequency;
+      Serial.print("new dominant freq ");
+      Serial.println(dominant_frequency);
     }
   }
 
-  /* Calculate and send BPM */
-  bpm = dominantFrequency * 60;  // Convert frequency to beats per minute
+
+  // Calculate and send BPM
+  float bpm = dominant_frequency * 60;  // Convert frequency to beats per minute
   Serial.print("Dominant Frequency: ");
-  Serial.print(dominantFrequency);
+  Serial.print(dominant_frequency);
   Serial.print(" Hz, Pulse: ");
   Serial.print(bpm);
   Serial.println(" BPM");
 
-  // Update BLE characteristic with BPM if a device is connected
-  if (deviceConnected && bpm > 20 && bpm < 220) {
-    uint8_t bpmData[2];
-    bpmData[0] = 0x00;                      // Flags byte, set to 0x00 for 8-bit heart rate format
-    bpmData[1] = (uint8_t)bpm;              // Heart rate measurement as a single byte
-    pCharacteristic->setValue(bpmData, 2);  // Set characteristic value with flags + bpm
-    pCharacteristic->notify();              // Notify connected client with BPM data
-  }
-  delay(1000);  // Delay before next analysis
+  uint8_t bpmData[2];
+  bpmData[0] = 0x00;                      // Flags byte, set to 0x00 for 8-bit heart rate format
+  bpmData[1] = (uint8_t)bpm;              // Heart rate measurement as a single byte
+  pCharacteristic->setValue(bpmData, 2);  // Set characteristic value with flags + bpm
+  pCharacteristic->notify();              // Notify connected client with BPM data
 }
