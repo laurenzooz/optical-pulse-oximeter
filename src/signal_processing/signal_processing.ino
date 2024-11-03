@@ -75,12 +75,11 @@ void loop() {
   if (Serial.available() > 0) {
     // Read the incoming data
     float value = Serial.parseFloat();
-    //Serial.println(value);
+
     signal_data[num_samples++] = value;  // Updated to `signal_data` to avoid conflict
 
     // Check if we've received enough samples for one interval
     if (num_samples >= points_per_interval) {
-      //Serial.println("Gonna calculate the pulse");
       processInterval();
       num_samples = 0;  // Reset sample count for the next interval
     }
@@ -89,8 +88,6 @@ void loop() {
 }
 
 void processInterval() {
-  //Serial.println("Starting the first loop");
-
   
   FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward);	/* Weigh data */
   FFT.compute(FFTDirection::Forward); /* Compute FFT */
