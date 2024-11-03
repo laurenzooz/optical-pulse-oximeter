@@ -9,12 +9,11 @@ const int points_per_second = 20;  // Sampling rate is 20 samples per second (1 
 //const int interval_duration = 5;   // Interval duration in seconds
 const int points_per_interval = 128;
 
-// Heart rate limits (in frequency, ~40 to 180 bpm)
-const float min_freq = 0.65;
-const float max_freq = 3;
+// Heart rate limits (in frequency, 60 to 120 bpm)
+const float min_freq = 1;
+const float max_freq = 2;
 
 int num_samples = 0;   // Track the number of samples received
-float heart_rates[8];  // To store heart rates for each interval
 int interval_count = 0;
 
 double vReal[points_per_interval];
@@ -113,11 +112,11 @@ void processInterval() {
 
   // Calculate and send BPM
   float bpm = dominant_frequency * 60;  // Convert frequency to beats per minute
-  Serial.print("Dominant Frequency: ");
+  /*Serial.print("Dominant Frequency: ");
   Serial.print(dominant_frequency);
   Serial.print(" Hz, Pulse: ");
   Serial.print(bpm);
-  Serial.println(" BPM");
+  Serial.println(" BPM");*/
 
   uint8_t bpmData[2];
   bpmData[0] = 0x00;                      // Flags byte, set to 0x00 for 8-bit heart rate format
