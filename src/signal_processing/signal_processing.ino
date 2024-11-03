@@ -96,8 +96,7 @@ void processInterval() {
   float peak = FFT.majorPeak();
   
   /*
-  Serial.println("Starting the loop");
-
+  // find higest magnitude between the desired range
   for (int i = 1; i < points_per_interval / 2; i++) {
     float frequency = i * (points_per_second / (float)points_per_interval);
     float magnitude = sqrt(vReal[i * 2] * vReal[i * 2] + vReal[i * 2 + 1] * vReal[i * 2 + 1]);
