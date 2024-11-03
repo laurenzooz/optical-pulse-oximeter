@@ -7,18 +7,18 @@
 
 const int points_per_second = 20;  // Sampling rate is 20 samples per second (1 / 0.05)
 //const int interval_duration = 5;   // Interval duration in seconds
-const int points_per_interval = 64;
+const int points_per_interval = 128;
 
 // Heart rate limits (in frequency, ~40 to 180 bpm)
 const float min_freq = 0.65;
 const float max_freq = 3;
 
-int num_samples = 0;                     // Track the number of samples received
-float heart_rates[8];                    // To store heart rates for each interval
+int num_samples = 0;   // Track the number of samples received
+float heart_rates[8];  // To store heart rates for each interval
 int interval_count = 0;
 
 double vReal[points_per_interval];
-double vImag[points_per_interval]; 
+double vImag[points_per_interval];
 
 ArduinoFFT<double> FFT = ArduinoFFT<double>(vReal, vImag, points_per_interval, 20, false);
 
@@ -87,28 +87,30 @@ void loop() {
 }
 
 void processInterval() {
-  
-  FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward);	/* Weigh data */
-  FFT.compute(FFTDirection::Forward); /* Compute FFT */
-  FFT.complexToMagnitude(); /* Compute magnitudes */
-  
-  float peak = FFT.majorPeak();
-  
-  /*
-  // find higest magnitude between the desired range
-  for (int i = 1; i < points_per_interval / 2; i++) {
-    float frequency = i * (points_per_second / (float)points_per_interval);
-    float magnitude = sqrt(vReal[i * 2] * vReal[i * 2] + vReal[i * 2 + 1] * vReal[i * 2 + 1]);
 
-    if (frequency >= min_freq && frequency <= max_freq && magnitude > max_magnitude) {
-      max_magnitude = magnitude;
-      dominant_frequency = frequency;
-      Serial.print("new dominant freq ");
-      Serial.println(dominant_frequency);
+  FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward); /* Weigh data */
+  FFT.compute(FFTDirection::Forward);                       /* Compute FFT */
+  FFT.complexToMagnitude();                                 /* Compute magnitudes */
+
+  float max_magnitude = 0.0;
+  float dominant_frequency = 0.0;
+
+/*
+  // find higest magnitude between the desired range
+  for (int i = 1; i < (points_per_interval / 2); i++) {   
+    double frequency = (i * 20.0) / points_per_interval;  // Calculate frequency of each bin
+    
+    // Check if the frequency is within heart rate limits
+    if (frequency >= min_freq && frequency <= max_freq) {
+      if (vReal[i] > max_magnitude) {
+        max_magnitude = vReal[i];        // Update maximum magnitude
+        dominant_frequency = frequency;  // Update dominant frequency
+      }
     }
   }
-
 */
+  float peak = FFT.majorPeak();
+
   // Calculate and send BPM
   float bpm = peak * 60;  // Convert frequency to beats per minute
   Serial.print("Dominant Frequency: ");
