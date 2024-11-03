@@ -1,3 +1,5 @@
+#include <LittleFS.h>
+
 #include <Arduino.h>
 #include <arduinoFFT.h>
 #include <BLEDevice.h>
@@ -6,28 +8,19 @@
 #include <BLE2902.h>
 #include <LittleFS.h>
 
-#define ANALOG_PIN A0  // Define the analog input pin for the sensor
-#define FILE_PATH "/high_spikes_interval_50ms.log"
+#define SAMPLES 256             // Must be a power of 2
+#define SAMPLING_FREQUENCY 250  // Hz, must be less than 10000 due to ADC sampling speed
+#define ANALOG_PIN A0           // Define the analog input pin for the sensor
+#define FILE_PATH "/data/data.txt"
 
-const int sampleInterval = 50;                                    // Sampling interval in ms (20 Hz sampling rate)
-const int intervalDuration = 5000;                                // Interval duration in ms (5 seconds)
-const int pointsPerInterval = intervalDuration / sampleInterval;  // Number of points per interval
+unsigned int samplingPeriod_us;
+unsigned long microseconds;
 
-// bpm limits (converted to freq)
-const float minFrequency = 40.0 / 60.0;
-const float maxFrequency = 180.0 / 60.0;
+double vReal[SAMPLES];  // Array of real values
+double vImag[SAMPLES];  // Array of imaginary values
 
-arduinoFFT FFT = arduinoFFT();
-
-// Arrays for FFT computation
-double signal[pointsPerInterval];
-double real[pointsPerInterval];
-double imag[pointsPerInterval];
-
-// Variables
-float heartRates[32];
-int heartRateIndex = 0;
-
+// Initialize the FFT object without specifying the sampling frequency
+ArduinoFFT<double> FFT = ArduinoFFT<double>(vReal, vImag, SAMPLES, SAMPLING_FREQUENCY, false);
 
 // BLE definitions
 BLEServer *pServer = NULL;
@@ -50,7 +43,6 @@ class MyServerCallbacks : public BLEServerCallbacks {
 };
 
 void setup() {
-  Serial.begin(115200);
 
   Serial.begin(115200);
   if (!LittleFS.begin()) {
@@ -84,95 +76,62 @@ void setup() {
   BLEDevice::startAdvertising();
   Serial.println("BLE Heart Rate Monitor is now advertising...");
 
+  // Set the sampling period for the analog readings
+  samplingPeriod_us = round(1000000 * (1.0 / SAMPLING_FREQUENCY));
+}
 
+void loop() {
+  /* Collect SAMPLES number of readings */
   File file = LittleFS.open(FILE_PATH, "r");
   if (!file) {
     Serial.println("Failed to open file for reading");
     delay(1000);
     return;
   }
+  for (int i = 0; i < SAMPLES; i++) {
+    microseconds = micros();  // Overflows after around 70 minutes!
 
-  Serial.println("Heart Rate Detection System Started.");
-}
+    vReal[i] = file.parseFloat();
+    Serial.print("Read value: ");
+    Serial.println(vReal[i]);  // change to analogRead(ANALOG_PIN);  for pin
+    vImag[i] = 0;
 
-void loop() {
-
-  // Read data for each 5-second interval
-  int sampleIndex = 0;
-
-  while (dataFile.available() && sampleIndex < pointsPerInterval) {
-    String line = dataFile.readStringUntil('\n');
-    signal[sampleIndex++] = line.toDouble();  // Convert each line to a double and store it
-  }
-
-  if (sampleIndex < pointsPerInterval) {
-    Serial.println("End of file reached. Stopping analysis.");
-    dataFile.close();
-    while (true);  // Stop further processing
-  }
-
-  for (int i = 0; i < pointsPerInterval; i++) {
-    real[i] = signal[i];  // Copy data to real part of the FFT input
-    imag[i] = 0;          // Imaginary part is zero for real signals
+    /* Wait for the next sample */
+    while (micros() < (microseconds + samplingPeriod_us)) {}
   }
 
   /* Perform FFT on the samples */
-  FFT.Windowing(real, pointsPerInterval, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
-  FFT.Compute(real, imag, pointsPerInterval, FFT_FORWARD);
-  FFT.ComplexToMagnitude(real, imag, pointsPerInterval);
+  FFT.windowing(vReal, SAMPLES, FFT_WIN_TYP_HAMMING, FFT_FORWARD);  // Apply a window function to reduce spectral leakage
+  FFT.compute(vReal, vImag, SAMPLES, FFT_FORWARD);                  // Compute the FFT
+  FFT.complexToMagnitude(vReal, vImag, SAMPLES);                    // Compute magnitudes of the frequency bins
 
-  float dominantFrequency = 0;
-  float maxMagnitude = 0;
-  for (int i = 1; i < pointsPerInterval / 2; i++) {                               // Only look at positive frequencies
-    float frequency = i * (1.0 / (pointsPerInterval * sampleInterval / 1000.0));  // Frequency in Hz
-    if (frequency > minFrequency && frequency < maxFrequency) {
-      if (real[i] > maxMagnitude) {
-        maxMagnitude = real[i];
-        dominantFrequency = frequency;
-      }
+  /* Find the dominant frequency */
+  double maxMagnitude = 0;       // Reset maximum magnitude
+  double dominantFrequency = 0;  // Reset dominant frequency
+
+  for (int i = 1; i < (SAMPLES / 2); i++) {                       // Start from 1 to skip the DC component
+    double frequency = (i * 1.0 * SAMPLING_FREQUENCY) / SAMPLES;  // Calculate frequency of each bin
+    if (vReal[i] > maxMagnitude) {
+      maxMagnitude = vReal[i];        // Update maximum magnitude
+      dominantFrequency = frequency;  // Update dominant frequency
     }
   }
 
-  float heartRateBPM = dominantFrequency * 60;      // Convert frequency to BPM
-  if (heartRateBPM >= 40 && heartRateBPM <= 180) {  // Check if it's in the acceptable range
-    heartRates[heartRateIndex++] = heartRateBPM;
-    Serial.print("Interval ");
-    Serial.print(heartRateIndex);
-    Serial.print(": Estimated Heart Rate: ");
-    Serial.print(heartRateBPM);
-    Serial.println(" BPM");
+  /* Calculate and send BPM */
+  bpm = dominantFrequency * 60;  // Convert frequency to beats per minute
+  Serial.print("Dominant Frequency: ");
+  Serial.print(dominantFrequency);
+  Serial.print(" Hz, Pulse: ");
+  Serial.print(bpm);
+  Serial.println(" BPM");
 
-    if (deviceConnected) {
-      uint8_t bpmData[2];
-      bpmData[0] = 0x00;                           // Flags byte, set to 0x00 for 8-bit heart rate format
-      bpmData[1] = (uint8_t)bpm;                   // Heart rate measurement as a single byte
-      pCharacteristic->setValue(heartRateBPM, 2);  // Set characteristic value with flags + bpm
-      pCharacteristic->notify();                   // Notify connected client with BPM data
-    }
-
-  } else {
-    Serial.print("Interval ");
-    Serial.print(heartRateIndex + 1);
-    Serial.println(": No valid heart rate detected");
-    heartRates[heartRateIndex++] = 0;  // Placeholder for no valid heart rate
+  // Update BLE characteristic with BPM if a device is connected
+  if (deviceConnected && bpm > 20 && bpm < 220) {
+    uint8_t bpmData[2];
+    bpmData[0] = 0x00;                      // Flags byte, set to 0x00 for 8-bit heart rate format
+    bpmData[1] = (uint8_t)bpm;              // Heart rate measurement as a single byte
+    pCharacteristic->setValue(bpmData, 2);  // Set characteristic value with flags + bpm
+    pCharacteristic->notify();              // Notify connected client with BPM data
   }
-
-
   delay(1000);  // Delay before next analysis
-
-  if (heartRateIndex >= 10) {
-    Serial.println("Summary of Heart Rates for Each 5-Second Interval:");
-    for (int i = 0; i < heartRateIndex; i++) {
-      Serial.print("Interval ");
-      Serial.print(i + 1);
-      Serial.print(": ");
-      if (heartRates[i] > 0) {
-        Serial.print(heartRates[i]);
-        Serial.println(" BPM");
-      } else {
-        Serial.println("No valid heart rate detected");
-      }
-    }
-    heartRateIndex = 0;  // Reset for a new cycle
-  }
 }
