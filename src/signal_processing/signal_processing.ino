@@ -114,7 +114,7 @@ void processInterval() {
   // Calculate and send BPM
   float bpm = peak * 60;  // Convert frequency to beats per minute
   Serial.print("Dominant Frequency: ");
-  Serial.print(dominant_frequency);
+  Serial.print(peak);
   Serial.print(" Hz, Pulse: ");
   Serial.print(bpm);
   Serial.println(" BPM");
