@@ -7,11 +7,11 @@
 
 const int points_per_second = 20;  // Sampling rate is 20 samples per second (1 / 0.05)
 //const int interval_duration = 5;   // Interval duration in seconds
-const int points_per_interval = 128;
+const int points_per_interval = 64;
 
 // Heart rate limits (in frequency, 60 to 120 bpm)
-const float min_freq = 1;
-const float max_freq = 2;
+const float min_freq = 1.0;
+const float max_freq = 2.0;
 
 int num_samples = 0;   // Track the number of samples received
 int interval_count = 0;
@@ -75,6 +75,13 @@ void loop() {
     float value = Serial.parseFloat();
 
     vReal[num_samples++] = value;  // save the real values
+
+    // Convert the incoming value to an 8-bit integer format for BLE transmission
+    uint8_t valueData[2];
+    valueData[0] = 0x01;                 // Custom flag byte for raw value notification
+    valueData[1] = (uint8_t)value;       // Raw value as a single byte
+    pCharacteristic->setValue(valueData, 2);  // Set characteristic value with flag + raw value
+    pCharacteristic->notify();                // Notify connected client with the raw data
 
     // Check if we've received enough samples for one interval
     if (num_samples >= points_per_interval) {
