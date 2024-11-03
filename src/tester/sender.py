@@ -11,7 +11,7 @@ with open('data.txt', 'r') as file:
         value = line.strip()  # Get the data value and remove any whitespace
         if value:  # Make sure the line isn't empty
             ser.write((value + '\n').encode())  # Send value with newline
-            time.sleep(0.01)  # Small delay to prevent buffer overflow
+            time.sleep(0.05)  # Small delay to prevent buffer overflow
         else:
             print("Skipped an empty line.")
 
