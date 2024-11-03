@@ -79,7 +79,7 @@ void loop() {
     // Convert the incoming value to an 8-bit integer format for BLE transmission
     uint8_t valueData[2];
     valueData[0] = 0x01;                 // Custom flag byte for raw value notification
-    valueData[1] = (uint8_t)value;       // Raw value as a single byte
+    valueData[1] = (uint8_t)(constrain(value, 0, 255));       // Raw value as a single byte
     pCharacteristic->setValue(valueData, 2);  // Set characteristic value with flag + raw value
     pCharacteristic->notify();                // Notify connected client with the raw data
 
@@ -119,11 +119,11 @@ void processInterval() {
 
   // Calculate and send BPM
   float bpm = dominant_frequency * 60;  // Convert frequency to beats per minute
-  /*Serial.print("Dominant Frequency: ");
-  Serial.print(dominant_frequency);
-  Serial.print(" Hz, Pulse: ");
+  //Serial.print("Dominant Frequency: ");
+  //Serial.print(dominant_frequency);
+  //Serial.print(" Hz, Pulse: ");
   Serial.print(bpm);
-  Serial.println(" BPM");*/
+  //Serial.println(" BPM");
 
   uint8_t bpmData[2];
   bpmData[0] = 0x00;                      // Flags byte, set to 0x00 for 8-bit heart rate format
