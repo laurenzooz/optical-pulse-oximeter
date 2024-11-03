@@ -13,7 +13,6 @@ const int points_per_interval = 64;
 const float min_freq = 0.65;
 const float max_freq = 3;
 
-float signal_data[points_per_interval];  // Renamed to avoid conflict with C standard library `signal`
 int num_samples = 0;                     // Track the number of samples received
 float heart_rates[8];                    // To store heart rates for each interval
 int interval_count = 0;
@@ -76,7 +75,7 @@ void loop() {
     // Read the incoming data
     float value = Serial.parseFloat();
 
-    signal_data[num_samples++] = value;  // Updated to `signal_data` to avoid conflict
+    vReal[num_samples++] = value;  // save the real values
 
     // Check if we've received enough samples for one interval
     if (num_samples >= points_per_interval) {
