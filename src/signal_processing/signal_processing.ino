@@ -95,7 +95,7 @@ void processInterval() {
   float max_magnitude = 0.0;
   float dominant_frequency = 0.0;
 
-/*
+
   // find higest magnitude between the desired range
   for (int i = 1; i < (points_per_interval / 2); i++) {   
     double frequency = (i * 20.0) / points_per_interval;  // Calculate frequency of each bin
@@ -108,13 +108,13 @@ void processInterval() {
       }
     }
   }
-*/
-  float peak = FFT.majorPeak();
+
+//  float peak = FFT.majorPeak();
 
   // Calculate and send BPM
-  float bpm = peak * 60;  // Convert frequency to beats per minute
+  float bpm = dominant_frequency * 60;  // Convert frequency to beats per minute
   Serial.print("Dominant Frequency: ");
-  Serial.print(peak);
+  Serial.print(dominant_frequency);
   Serial.print(" Hz, Pulse: ");
   Serial.print(bpm);
   Serial.println(" BPM");
