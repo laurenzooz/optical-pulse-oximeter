@@ -13,14 +13,14 @@ const int points_per_interval = 128;
 const float min_freq = 0.8;
 const float max_freq = 3.0;
 
-int num_samples = 0;   // Track the number of samples received
+int num_samples = 0;  // Track the number of samples received
 int interval_count = 0;
-int num_bpms = 0; // amount of already measured and calculated bpm values
+int num_bpms = 0;  // amount of already measured and calculated bpm values
 
 double vReal[points_per_interval];
 double vImag[points_per_interval];
 
-float bpm_values[3]; // store 3 values, get the median
+float bpm_values[3];  // store 3 values, get the median
 
 ArduinoFFT<double> FFT = ArduinoFFT<double>(vReal, vImag, points_per_interval, 20, false);
 
@@ -99,7 +99,8 @@ void loop() {
     if (bpm_values[2] != 0) {
       // shift newest values to left, empty the last. Don't start over, just constantly keep last three values saved(so minus one from current count.)
       num_bpms--;
-      sendData(); // Send the data to bluetooth and serial.
+      sendData();  // Get the median and send to bluetooth and serial.
+      bpm_values[2] = 0;
     }
   }
   delay(50);  // Delay before next analysis
@@ -118,9 +119,9 @@ void processInterval() {
 
 
   // find higest magnitude between the desired range
-  for (int i = 1; i < (points_per_interval / 2); i++) {   
+  for (int i = 1; i < (points_per_interval / 2); i++) {
     double frequency = (i * 20.0) / points_per_interval;  // Calculate frequency of each bin
-    
+
     // Check if the frequency is within heart rate limits
     if (frequency >= min_freq && frequency <= max_freq) {
       if (vReal[i] > max_magnitude) {
@@ -130,12 +131,12 @@ void processInterval() {
     }
   }
 
-//  float peak = FFT.majorPeak();
+  //  float peak = FFT.majorPeak();
 
   // Calculate and send BPM
   float bpm = dominant_frequency * 60;  // Convert frequency to beats per minute
 
-  bpm_values[num_bpms++] = bpm; // save the measured bpm
+  bpm_values[num_bpms++] = bpm;  // save the measured bpm
 
   Serial.print("Last bpm: ");
   Serial.println(bpm);
@@ -143,34 +144,32 @@ void processInterval() {
   //Serial.print("Dominant Frequency: ");
   //Serial.print(dominant_frequency);
   //Serial.print(" Hz, Pulse: ");
-
 }
 
 // find the median from three values
 float medianOfThree(float a, float b, float c) {
-    if ((a <= b && b <= c) || (c <= b && b <= a)) {
-        return b;  // b is the median
-    } else if ((b <= a && a <= c) || (c <= a && a <= b)) {
-        return a;  // a is the median
-    } else {
-        return c;  // c is the median
-    }
+  if ((a <= b && b <= c) || (c <= b && b <= a)) {
+    return b;  // b is the median
+  } else if ((b <= a && a <= c) || (c <= a && a <= b)) {
+    return a;  // a is the median
+  } else {
+    return c;  // c is the median
+  }
 }
 
 
 void sendData() {
 
-  
+
   float median_bpm = medianOfThree(bpm_values[0], bpm_values[1], bpm_values[2]);
-  
+
 
 
   Serial.print("Median");
-  Seria.println(median_bpm);
+  Serial.println(median_bpm);
   uint8_t bpmData[2];
   bpmData[0] = 0x00;                      // Flags byte, set to 0x00 for 8-bit heart rate format
-  bpmData[1] = (uint8_t)median_bpm;              // Heart rate measurement as a single byte
+  bpmData[1] = (uint8_t)median_bpm;       // Heart rate measurement as a single byte
   pCharacteristic->setValue(bpmData, 2);  // Set characteristic value with flags + bpm
   pCharacteristic->notify();              // Notify connected client with BPM data
 }
-
