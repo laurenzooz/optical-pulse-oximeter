@@ -7,7 +7,8 @@
 
 //const int points_per_second = 20;  // Sampling rate is 20 samples per second (1 / 0.05)
 //const int interval_duration = 5;   // Interval duration in seconds
-const int points_per_interval = 128;
+const int points_per_interval = 4096;
+const int sampling_frequency = 1000;
 
 // Heart rate limits (in frequency, 40 to 180 bpm)
 const float min_freq = 0.8;
@@ -120,7 +121,7 @@ void processInterval() {
 
   // find higest magnitude between the desired range
   for (int i = 1; i < (points_per_interval / 2); i++) {
-    double frequency = (i * 20.0) / points_per_interval;  // Calculate frequency of each bin
+    double frequency = (i * sampling_frequency) / points_per_interval;  // Calculate frequency of each bin
 
     // Check if the frequency is within heart rate limits
     if (frequency >= min_freq && frequency <= max_freq) {
