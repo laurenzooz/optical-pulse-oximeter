@@ -7,7 +7,7 @@
 
 //const int points_per_second = 20;  // Sampling rate is 20 samples per second (1 / 0.05)
 //const int interval_duration = 5;   // Interval duration in seconds
-const int points_per_interval = 64;
+const int points_per_interval = 128;
 const float sampling_frequency = 20.0;
 
 // Heart rate limits (in frequency, 48 to 180 bpm)
@@ -111,14 +111,14 @@ void processInterval() {
 
   //Serial.println("Processing intervval");
 
-  FFT.windowing(FFTWindow::Welch, FFTDirection::Forward); /* Weigh data */
+  FFT.windowing(FFTWindow::Hann, FFTDirection::Forward); /* Weigh data */
   FFT.compute(FFTDirection::Forward);                       /* Compute FFT */
   FFT.complexToMagnitude();                                 /* Compute magnitudes */
 
   float max_magnitude = 0.0;
   float dominant_frequency = 0.0;
 
-
+/*
   // find higest magnitude between the desired range
   for (int i = 1; i < (points_per_interval / 2); i++) {
     double frequency = (i * sampling_frequency) / points_per_interval;  // Calculate frequency of each bin
@@ -130,7 +130,31 @@ void processInterval() {
         dominant_frequency = frequency;  // Update dominant frequency
       }
     }
+  }*/
+
+float total_magnitude = 0.0;
+  float weighted_frequency_sum = 0.0;
+// chatgpt weighed implementation
+  for (int i = 1; i < (points_per_interval / 2); i++) {
+    double frequency = (i * sampling_frequency) / points_per_interval;  // Frequency of each bin
+
+    // Check if the frequency is within heart rate limits
+    if (frequency >= min_freq && frequency <= max_freq) {
+      if (vReal[i] > max_magnitude) {
+        max_magnitude = vReal[i];
+        dominant_frequency = frequency;
+      }
+      // Weighted frequency calculation for additional stability
+      total_magnitude += vReal[i];
+      weighted_frequency_sum += vReal[i] * frequency;
+    }
   }
+
+  // Calculate weighted frequency as an alternative to dominant_frequency
+  if (total_magnitude > 0) {
+    dominant_frequency = weighted_frequency_sum / total_magnitude;
+  }
+
 
   //  float peak = FFT.majorPeak();
 
@@ -149,13 +173,15 @@ void processInterval() {
 
 // find the median from three values
 float medianOfThree(float a, float b, float c) {
+  return (a + b + c) / 3.0; // test with average
+  /*
   if ((a <= b && b <= c) || (c <= b && b <= a)) {
     return b;  // b is the median
   } else if ((b <= a && a <= c) || (c <= a && a <= b)) {
     return a;  // a is the median
   } else {
     return c;  // c is the median
-  }
+  }*/
 }
 
 
