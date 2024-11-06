@@ -10,7 +10,7 @@
 const int points_per_interval = 64;
 const float sampling_frequency = 20.0;
 
-// Heart rate limits (in frequency, 40 to 180 bpm)
+// Heart rate limits (in frequency, 48 to 180 bpm)
 const float min_freq = 0.8;
 const float max_freq = 3.0;
 
@@ -104,7 +104,7 @@ void loop() {
       bpm_values[2] = 0;
     }
   }
-  delay(1/sampling_frequency);  // Delay before next analysis
+  delay(50);  // Delay before next analysis
 }
 
 void processInterval() {
