@@ -104,7 +104,7 @@ void loop() {
       bpm_values[2] = 0;
     }
   }
-  delay(50);  // Delay before next analysis
+  delay(30);  // Delay before next analysis
 }
 
 void processInterval() {
