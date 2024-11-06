@@ -7,8 +7,8 @@
 
 //const int points_per_second = 20;  // Sampling rate is 20 samples per second (1 / 0.05)
 //const int interval_duration = 5;   // Interval duration in seconds
-const int points_per_interval = 4096;
-const int sampling_frequency = 1000;
+const int points_per_interval = 128;
+const float sampling_frequency = 20.0;
 
 // Heart rate limits (in frequency, 40 to 180 bpm)
 const float min_freq = 0.8;
