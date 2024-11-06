@@ -7,7 +7,7 @@
 
 //const int points_per_second = 20;  // Sampling rate is 20 samples per second (1 / 0.05)
 //const int interval_duration = 5;   // Interval duration in seconds
-const int points_per_interval = 128;
+const int points_per_interval = 64;
 const float sampling_frequency = 20.0;
 
 // Heart rate limits (in frequency, 40 to 180 bpm)
@@ -23,7 +23,7 @@ double vImag[points_per_interval];
 
 float bpm_values[3];  // store 3 values, get the median
 
-ArduinoFFT<double> FFT = ArduinoFFT<double>(vReal, vImag, points_per_interval, 20, false);
+ArduinoFFT<double> FFT = ArduinoFFT<double>(vReal, vImag, points_per_interval, sampling_frequency);
 
 // BLE definitions
 BLEServer *pServer = NULL;
@@ -104,14 +104,14 @@ void loop() {
       bpm_values[2] = 0;
     }
   }
-  delay(50);  // Delay before next analysis
+  delay(1/sampling_frequency);  // Delay before next analysis
 }
 
 void processInterval() {
 
   //Serial.println("Processing intervval");
 
-  FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward); /* Weigh data */
+  FFT.windowing(FFTWindow::Welch, FFTDirection::Forward); /* Weigh data */
   FFT.compute(FFTDirection::Forward);                       /* Compute FFT */
   FFT.complexToMagnitude();                                 /* Compute magnitudes */
 
