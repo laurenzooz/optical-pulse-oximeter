@@ -108,7 +108,7 @@ void loop() {
 
 void processInterval() {
 
-
+  //Serial.println("Processing intervval");
 
   FFT.windowing(FFTWindow::Hamming, FFTDirection::Forward); /* Weigh data */
   FFT.compute(FFTDirection::Forward);                       /* Compute FFT */
@@ -165,7 +165,7 @@ void sendData() {
 
 
 
-  Serial.print("Median");
+  Serial.print("Median of last 3: ");
   Serial.println(median_bpm);
   uint8_t bpmData[2];
   bpmData[0] = 0x00;                      // Flags byte, set to 0x00 for 8-bit heart rate format
