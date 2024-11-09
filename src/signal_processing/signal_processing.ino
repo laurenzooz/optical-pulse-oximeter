@@ -1,13 +1,16 @@
 #include <Arduino.h>
-#include <arduinoFFT.h>
 #include <BLEDevice.h>
 #include <BLEService.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
+#include <PeakDetection.h>                       // import lib
+
+PeakDetection peakDetection; 
+
 //const int points_per_second = 20;  // Sampling rate is 20 samples per second (1 / 0.05)
 //const int interval_duration = 5;   // Interval duration in seconds
-const int points_per_interval = 64;
+const int points_per_interval = 128;
 const float sampling_frequency = 20.0;
 
 // Heart rate limits (in frequency, 48 to 180 bpm)
@@ -18,12 +21,12 @@ int num_samples = 0;  // Track the number of samples received
 int interval_count = 0;
 int num_bpms = 0;  // amount of already measured and calculated bpm values
 
-double vReal[points_per_interval];
-double vImag[points_per_interval];
+//double vReal[points_per_interval];
+//double vImag[points_per_interval];
 
-float bpm_values[3];  // store 3 values, get the median
+//float bpm_values[3];  // store 3 values, get the median
 
-ArduinoFFT<double> FFT = ArduinoFFT<double>(vReal, vImag, points_per_interval, sampling_frequency);
+//ArduinoFFT<double> FFT = ArduinoFFT<double>(vReal, vImag, points_per_interval, sampling_frequency);
 
 // BLE definitions
 BLEServer *pServer = NULL;
@@ -71,132 +74,98 @@ void setup() {
   pAdvertising->setMaxPreferred(0x12);
   BLEDevice::startAdvertising();
   Serial.println("BLE Heart Rate Monitor is now advertising...");
+
+  //pinMode(1, INPUT);                            // analog pin used to connect the sensor
+  //peakDetection.begin(48, 3, 0.6);
+  peakDetection.begin(16, 1, 0.5);
 }
 
+
+unsigned long bpm = 0; // To store the sum of the intervals for averaging
+unsigned long previousPeakTime = 0;  // Variable to store the time of the previous peak
+unsigned long currentPeakTime = 0;   // Variable to store the time of the current peak
+unsigned long peakInterval = 0;      // Interval between peaks
+
+const int numIntervals = 3;  // Number of intervals to average
+unsigned long intervals[numIntervals];  // Array to store the last 5 intervals (in bpm)
+unsigned long totalBPM = 0;  // Sum of the last 5 bpm values
+int bpmIndex = 0;  // Index for storing the bpm values in the array
+unsigned long avgBPM = 0;  // Calculated average of the last 5 bpm values
+
 void loop() {
+
   if (Serial.available() > 0) {
     // Read the incoming data
     float value = Serial.parseFloat();
 
-    vReal[num_samples++] = value;  // save the real values
-
-
+    //double data = (double)analogRead(1) / 512 - 1;  // Converts the sensor value to a range between -1 and 1
+    peakDetection.add(value);                     // Adds a new data point
+    int peak = peakDetection.getPeak();          // 0, 1, or -1 (detects peaks)
+    double filtered = peakDetection.getFilt();   // Moving average filter
     /*
-    // Convert the incoming value to an 8-bit integer format for BLE transmission
-    uint8_t valueData[2];
-    valueData[0] = 0x01;                 // Custom flag byte for raw value notification
-    valueData[1] = (uint8_t)(constrain(value, 0, 255));       // Raw value as a single byte
-    pCharacteristic->setValue(valueData, 2);  // Set characteristic value with flag + raw value
-    pCharacteristic->notify();                // Notify connected client with the raw data
+    Serial.print(value);                          // Print data
+    Serial.print(",");
+    Serial.print(peak);                          // Print peak status
+    Serial.print(",");
+    Serial.println(filtered);                    // Print moving average
     */
+    // When a peak is detected (value 1), calculate the time interval between peaks
+    if (peak == 1) {
+        currentPeakTime = millis();  // Get the current time when the peak occurs
 
-    // Check if we've received enough samples for one interval
-    if (num_samples >= points_per_interval) {
-      processInterval();
-      num_samples = 0;  // Reset sample count for the next interval
-    }
+        // If this is not the first peak, calculate the time interval between peaks
+        if (previousPeakTime != 0) {
+            peakInterval = currentPeakTime - previousPeakTime;  // Calculate the interval
+            if (peakInterval > 300 && peakInterval < 1000){
+            Serial.print("Time between peaks: ");
+            Serial.print(peakInterval);  // Print the interval in milliseconds
+            Serial.println(" ms");
+            bpm = 1/(peakInterval*0.001) * 60;
+            Serial.print("Heart rate: ");
+            Serial.print(bpm);  // Print the interval in milliseconds
+            Serial.println(" bpm");
 
-    // if three bpm values are measured, get the median
-    if (bpm_values[2] != 0) {
-      // shift newest values to left, empty the last. Don't start over, just constantly keep last three values saved(so minus one from current count.)
-      num_bpms--;
-      sendData();  // Get the median and send to bluetooth and serial.
-      bpm_values[2] = 0;
+            // Update the total BPM sum and store the current BPM in the array
+            totalBPM -= intervals[bpmIndex];  // Remove the oldest BPM value from totalBPM
+            intervals[bpmIndex] = bpm;  // Add the new BPM value to the array
+            totalBPM += bpm;  // Add the new BPM value to the total sum
+
+            // Move to the next index (circular buffer)
+            bpmIndex = (bpmIndex + 1) % numIntervals;
+
+            // Calculate the average BPM of the last 5 values
+            avgBPM = totalBPM / numIntervals;
+            Serial.print("Average Heart rate (5 readings): ");
+            Serial.print(avgBPM);  // Print the average heart rate
+            Serial.println(" bpm");
+            }
+
+             uint8_t bpmData[2];
+            bpmData[0] = 0x00;                      // Flags byte, set to 0x00 for 8-bit heart rate format
+            bpmData[1] = (uint8_t)avgBPM;       // Heart rate measurement as a single byte
+            pCharacteristic->setValue(bpmData, 2);  // Set characteristic value with flags + bpm
+            pCharacteristic->notify();              // Notify connected client with BPM data
+          
+        }
+
+        // Update the previous peak time to the current one
+        previousPeakTime = currentPeakTime;
     }
   }
-  delay(30);  // Delay before next analysis
+  delay(10);  // Optional delay for stability, adjust as needed
 }
 
-void processInterval() {
-
-  //Serial.println("Processing intervval");
-
-  FFT.windowing(FFTWindow::Hann, FFTDirection::Forward); /* Weigh data */
-  FFT.compute(FFTDirection::Forward);                       /* Compute FFT */
-  FFT.complexToMagnitude();                                 /* Compute magnitudes */
-
-  float max_magnitude = 0.0;
-  float dominant_frequency = 0.0;
 
 /*
-  // find higest magnitude between the desired range
-  for (int i = 1; i < (points_per_interval / 2); i++) {
-    double frequency = (i * sampling_frequency) / points_per_interval;  // Calculate frequency of each bin
-
-    // Check if the frequency is within heart rate limits
-    if (frequency >= min_freq && frequency <= max_freq) {
-      if (vReal[i] > max_magnitude) {
-        max_magnitude = vReal[i];        // Update maximum magnitude
-        dominant_frequency = frequency;  // Update dominant frequency
-      }
-    }
-  }*/
-
-float total_magnitude = 0.0;
-  float weighted_frequency_sum = 0.0;
-// chatgpt weighed implementation
-  for (int i = 1; i < (points_per_interval / 2); i++) {
-    double frequency = (i * sampling_frequency) / points_per_interval;  // Frequency of each bin
-
-    // Check if the frequency is within heart rate limits
-    if (frequency >= min_freq && frequency <= max_freq) {
-      if (vReal[i] > max_magnitude) {
-        max_magnitude = vReal[i];
-        dominant_frequency = frequency;
-      }
-      // Weighted frequency calculation for additional stability
-      total_magnitude += vReal[i];
-      weighted_frequency_sum += vReal[i] * frequency;
-    }
-  }
-
-  // Calculate weighted frequency as an alternative to dominant_frequency
-  if (total_magnitude > 0) {
-    dominant_frequency = weighted_frequency_sum / total_magnitude;
-  }
-
-
-  //  float peak = FFT.majorPeak();
-
-  // Calculate and send BPM
-  float bpm = dominant_frequency * 60;  // Convert frequency to beats per minute
-
-  bpm_values[num_bpms++] = bpm;  // save the measured bpm
-
-  Serial.print("Last bpm: ");
-  Serial.println(bpm);
-
-  //Serial.print("Dominant Frequency: ");
-  //Serial.print(dominant_frequency);
-  //Serial.print(" Hz, Pulse: ");
-}
-
-// find the median from three values
-float medianOfThree(float a, float b, float c) {
-  return (a + b + c) / 3.0; // test with average
-  /*
-  if ((a <= b && b <= c) || (c <= b && b <= a)) {
-    return b;  // b is the median
-  } else if ((b <= a && a <= c) || (c <= a && a <= b)) {
-    return a;  // a is the median
-  } else {
-    return c;  // c is the median
-  }*/
-}
-
 
 void sendData() {
-
-
   float median_bpm = medianOfThree(bpm_values[0], bpm_values[1], bpm_values[2]);
 
-
-
   Serial.print("Median of last 3: ");
-  Serial.println(median_bpm);
+  //Serial.println(median_bpm);
   uint8_t bpmData[2];
   bpmData[0] = 0x00;                      // Flags byte, set to 0x00 for 8-bit heart rate format
   bpmData[1] = (uint8_t)median_bpm;       // Heart rate measurement as a single byte
   pCharacteristic->setValue(bpmData, 2);  // Set characteristic value with flags + bpm
   pCharacteristic->notify();              // Notify connected client with BPM data
-}
+}*/
