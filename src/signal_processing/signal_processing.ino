@@ -14,7 +14,7 @@ BLECharacteristic *pCharacteristic = NULL;
 bool deviceConnected = false;
 
 #define SERVICE_UUID "adf2a6e6-9b6d-4b5f-a487-77e21aafbc88"  // UUID for the Heart Rate service
-#define CHARACTERISTIC_UUID "2A37"                           // UUID for the Heart Rate Measurement characteristic
+#define CHARACTERISTIC_UUID "00002a37-0000-1000-8000-00805f9b34fb"                           // UUID for the Heart Rate Measurement characteristic
 
 // Callback for device connection events
 class MyServerCallbacks : public BLEServerCallbacks {
@@ -57,7 +57,7 @@ void setup() {
 
   //pinMode(1, INPUT);                            // analog pin used to connect the sensor
   //peakDetection.begin(48, 3, 0.6); // defaults
-  peakDetection.begin(16, 1, 0.5);  // test different values (lag, threshold, influence)
+  peakDetection.begin(128, 2, 0.7);  // test different values (lag, threshold, influence)
 }
 
 unsigned long bpm = 0; // To store the sum of the intervals for averaging
@@ -111,13 +111,16 @@ void loop() {
                 Serial.print("Average Heart rate (5 readings): ");
                 Serial.print(avgBPM);  // Print the average heart rate
                 Serial.println(" bpm");
-
+                
                 // send data over bluetooth
                 uint8_t bpmData[2];
                 bpmData[0] = 0x00;                      // Flags byte, set to 0x00 for 8-bit heart rate format
                 bpmData[1] = (uint8_t)avgBPM;       // Heart rate measurement as a single byte
                 pCharacteristic->setValue(bpmData, 2);  // Set characteristic value with flags + bpm
                 pCharacteristic->notify();              // Notify connected client with BPM data
+                
+                
+
 
               }
             }
