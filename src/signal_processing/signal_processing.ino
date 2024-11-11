@@ -82,6 +82,11 @@ void loop() {
     int peak = peakDetection.getPeak();          // 0, 1, or -1 (detects peaks)
     double filtered = peakDetection.getFilt();   // Moving average filter
     
+    // send data over bluetooth
+    uint8_t bpmData[3];
+    bpmData[0] = 0x00;                      // Flags byte, set to 0x00 for 8-bit heart rate format
+    bpmData[1] = (uint8_t)value;       // Heart rate measurement as a single byte
+      
 
     // When a peak is detected (value 1), calculate the time interval between peaks
     if (peak == 1) {
@@ -111,23 +116,19 @@ void loop() {
                 Serial.print("Average Heart rate (5 readings): ");
                 Serial.print(avgBPM);  // Print the average heart rate
                 Serial.println(" bpm");
-                
-                // send data over bluetooth
-                uint8_t bpmData[2];
-                bpmData[0] = 0x00;                      // Flags byte, set to 0x00 for 8-bit heart rate format
-                bpmData[1] = (uint8_t)avgBPM;       // Heart rate measurement as a single byte
-                pCharacteristic->setValue(bpmData, 2);  // Set characteristic value with flags + bpm
-                pCharacteristic->notify();              // Notify connected client with BPM data
-                
-                
-
-
-              }
+              }           
             }
         }
         // Update the previous peak time to the current one
         previousPeakTime = currentPeakTime;
+
+
     }
+
+    bpmData[2] = (uint8_t)avgBPM;       // Heart rate measurement as a single byte
+
+    pCharacteristic->setValue(bpmData, 3);  // Set characteristic value with flags + bpm
+    pCharacteristic->notify();              // Notify connected client with BPM data
   }
   delay(10);  // Optional delay for stability, adjust as needed
 }
