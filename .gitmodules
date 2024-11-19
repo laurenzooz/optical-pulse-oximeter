@@ -1,0 +1,6 @@
+[submodule "optical-pulse-oximeter-pcb"]
+	path = optical-pulse-oximeter-pcb
+	url = https://github.com/IiroKarppanen/optical-pulse-oximeter-pcb.git
+[submodule "optical-pulse-oximeter-app"]
+	path = optical-pulse-oximeter-app
+	url = https://github.com/laurenzooz/optical-pulse-oximeter-app.git
