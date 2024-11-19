@@ -57,7 +57,7 @@ void setup() {
 
   //pinMode(1, INPUT);                            // analog pin used to connect the sensor
   //peakDetection.begin(48, 3, 0.6); // defaults
-  peakDetection.begin(128, 2, 0.7);  // test different values (lag, threshold, influence)
+  peakDetection.begin(64, 2, 0.3);  // test different values (lag, threshold, influence)
 }
 
 unsigned long bpm = 0; // To store the sum of the intervals for averaging
@@ -65,7 +65,7 @@ unsigned long previousPeakTime = 0;  // Variable to store the time of the previo
 unsigned long currentPeakTime = 0;   // Variable to store the time of the current peak
 unsigned long peakInterval = 0;      // Interval between peaks
 
-const int numIntervals = 5;  // Number of intervals to average
+const int numIntervals = 10;  // Number of intervals to average
 unsigned long intervals[numIntervals];  // Array to store the last 5 intervals (in bpm)
 unsigned long totalBPM = 0;  // Sum of the last 5 bpm values
 int bpmIndex = 0;  // Index for storing the bpm values in the array
@@ -73,11 +73,12 @@ unsigned long avgBPM = 0;  // Calculated average of the last 5 bpm values
 
 void loop() {
 
-  if (Serial.available() > 0) {
+  //if (Serial.available() > 0) {
     // Read the incoming data
-    float value = Serial.parseFloat(); // read from the python data sent
-
-    //double data = (double)analogRead(1) / 512 - 1;  // Converts the sensor value to a range between -1 and 1. Seems to work without converting the range?
+    //float value = Serial.parseFloat(); // read from the python data sent
+    double rawData = (double)analogRead(1);
+    double value = (double)rawData / 512 - 1;  // Converts the sensor value to a range between -1 and 1. 
+    
     peakDetection.add(value);                     // Adds a new data point
     int peak = peakDetection.getPeak();          // 0, 1, or -1 (detects peaks)
     double filtered = peakDetection.getFilt();   // Moving average filter
@@ -85,7 +86,7 @@ void loop() {
     // send data over bluetooth
     uint8_t bpmData[3];
     bpmData[0] = 0x00;                      // Flags byte, set to 0x00 for 8-bit heart rate format
-    bpmData[1] = (uint8_t)value;       // Heart rate measurement as a single byte
+    bpmData[1] = (uint8_t)rawData;       // Heart rate measurement as a single byte
       
 
     // When a peak is detected (value 1), calculate the time interval between peaks
@@ -129,6 +130,6 @@ void loop() {
 
     pCharacteristic->setValue(bpmData, 3);  // Set characteristic value with flags + bpm
     pCharacteristic->notify();              // Notify connected client with BPM data
-  }
+  //}
   delay(10);  // Optional delay for stability, adjust as needed
 }
