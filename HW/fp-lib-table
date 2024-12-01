@@ -9,4 +9,7 @@
   (lib (name "TPS7A4700RGWR")(type "KiCad")(uri "${KIPRJMOD}/libraries/TPS7A4700RGWR/TPS7A4700RGWR.pretty")(options "")(descr ""))
   (lib (name "TPD2EUSB30DRTR")(type "KiCad")(uri "${KIPRJMOD}/libraries/TPD2EUSB30DRTR/KiCADv6/TPD2EUSB30DRTR.pretty")(options "")(descr ""))
   (lib (name "ESP32_S3_MINI_1_N8")(type "KiCad")(uri "${KIPRJMOD}/libraries/ESP32_S3_MINI_1_N8/ESP32_S3_MINI_1_N8.pretty")(options "")(descr ""))
+  (lib (name "TLC59116IPWR")(type "KiCad")(uri "${KIPRJMOD}/libraries/TLC59116IPWR/TLC59116IPWR.pretty")(options "")(descr ""))
+  (lib (name "LMC6001BIN_NOPB")(type "KiCad")(uri "${KIPRJMOD}/libraries/LMC6001BIN_NOPB/LMC6001BIN_NOPB.pretty")(options "")(descr ""))
+  (lib (name "Jumper")(type "KiCad")(uri "${KIPRJMOD}/libraries/Jumper.pretty")(options "")(descr ""))
 )
