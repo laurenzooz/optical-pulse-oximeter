@@ -28,11 +28,17 @@ bool deviceConnected = false;
 // Callback for device connection events
 class MyServerCallbacks : public BLEServerCallbacks {
   void onConnect(BLEServer *pServer) {
+    Serial.println("Bluetooth connected");
     deviceConnected = true;
   };
 
   void onDisconnect(BLEServer *pServer) {
+    Serial.println("Bluetooth disconnected");
     deviceConnected = false;
+    
+    delay(100);  // Allow time for central to clean up the connection, then reconnect
+    BLEDevice::startAdvertising();
+    Serial.println("Advertising restarted.");
   }
 };
 
@@ -110,6 +116,8 @@ void PulseMeasurementTask(void *parameter) {
         uint8_t bpmData[3];
         bpmData[0] = 0x00;                      // Flags byte, set to 0x00 for 8-bit heart rate format
         bpmData[1] = (uint8_t)rawData;       // Heart rate measurement as a single byte
+
+
         
 
         // When a peak is detected (value 1), calculate the time interval between peaks
@@ -146,14 +154,17 @@ void PulseMeasurementTask(void *parameter) {
             // Update the previous peak time to the current one
             previousPeakTime = currentPeakTime;
 
-            pCharacteristic->setValue(bpmData, 3);  // Set characteristic value with flags + bpm
-            pCharacteristic->notify();              // Notify connected client with BPM data
+            
 
 
         }
 
         bpmData[2] = (uint8_t)avgBPM;       // Heart rate measurement as a single byte
-
+        
+        if (deviceConnected) {
+            pCharacteristic->setValue(bpmData, 3);  // Set characteristic value with flags + bpm
+            pCharacteristic->notify();              // Notify connected client with BPM data
+        }
 
         vTaskDelay(pdMS_TO_TICKS(0)); // Wait 40ms before updating again
     }
@@ -163,7 +174,7 @@ void PulseMeasurementTask(void *parameter) {
 void setup() {
 
     pinMode(4, INPUT);   
-    peakDetection.begin(64, 3, 0.3);  // test different values (lag, threshold, influence)
+    peakDetection.begin(128, 4, 0.75);  // test different values (lag, threshold, influence)
 
     board1.begin();
     delay(1000);
@@ -317,6 +328,15 @@ void loop() {
     lv_timer_handler(); // Update LVGL tasks
     delay(40);
     
+
+    // Check BLE connection
+    if (!deviceConnected) {
+        // If not connected, ensure advertising is active
+        //if (!BLEDevice::getAdvertising()->isAdvertising()) {
+            BLEDevice::startAdvertising();
+            Serial.println("Re-advertising since device is not connected.");
+        //}
+    }
 
     analogRead(11);
 
